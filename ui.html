@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>🧠 AI Assistant Ana</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Poppins', sans-serif;
+      margin: 0;
+      padding: 20px;
+      background: url('https://www.transparenttextures.com/patterns/az-subtle.png');
+      background-color: #ffd1dc;
+      color: #222;
+    }
+
+    h2 {
+      text-align: center;
+      font-size: 2.4em;
+      color: #6a0572;
+      text-shadow: 1px 1px #fff;
+    }
+
+    textarea {
+      width: 100%;
+      height: 100px;
+      border-radius: 12px;
+      padding: 10px;
+      border: 2px dashed #a23e48;
+      background-color: #fff7f7;
+      font-size: 1.1em;
+      box-shadow: 3px 3px 10px rgba(0,0,0,0.1);
+      resize: vertical;
+    }
+
+    button {
+      margin: 8px 4px;
+      padding: 12px 20px;
+      background: linear-gradient(45deg, #ff416c, #ff4b2b);
+      border: none;
+      color: white;
+      font-weight: bold;
+      font-size: 1em;
+      border-radius: 10px;
+      cursor: pointer;
+      box-shadow: 0 5px 10px rgba(0,0,0,0.2);
+      flex: 1;
+      min-width: 120px;
+    }
+
+    button:hover {
+      background: linear-gradient(45deg, #ff4b2b, #ff416c);
+    }
+
+    .button-group {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 10px;
+    }
+
+    .card {
+      margin-top: 20px;
+      background: rgba(255, 255, 255, 0.85);
+      padding: 15px;
+      border-radius: 15px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    }
+
+    #listening {
+      color: #e60073;
+      font-weight: bold;
+      margin-left: 10px;
+    }
+
+    #settingsPanel {
+      display: none;
+      margin-top: 20px;
+      padding: 15px;
+      background: #ffe3ec;
+      border-radius: 12px;
+      box-shadow: 0 3px 8px rgba(0,0,0,0.1);
+    }
+
+    #settingsPanel label,
+    #settingsPanel select {
+      display: block;
+      margin-bottom: 10px;
+    }
+
+    @media (max-width: 600px) {
+      h2 {
+        font-size: 1.8em;
+      }
+
+      textarea {
+        font-size: 1em;
+      }
+
+      button {
+        font-size: 0.95em;
+        padding: 10px;
+        min-width: 100px;
+      }
+
+      .card {
+        padding: 12px;
+      }
+    }
+  </style>
+</head>
+<body>
+
+<h2>🎉 Meet Ana Your Assistant</h2>
+
+<textarea id="userInput" placeholder="Type or Speak something..."></textarea>
+
+<div class="button-group">
+  <button onclick="sendMessage()">Send 💬</button>
+  <button onclick="startListening()">🎙️ Speak</button>
+  <button onclick="stopSpeaking()">🛑 Stop</button>
+  <button onclick="toggleSettings()">⚙️ Settings</button>
+</div>
+
+<span id="listening"></span>
+
+<div id="settingsPanel">
+  <h3>⚙️ Settings</h3>
+  <label><input type="checkbox" id="hideResponse"> Hide Ana's Response</label>
+  <label><input type="checkbox" id="hideReminder"> Hide Reminders</label>
+  <label><input type="checkbox" id="hideTimetable"> Hide Timetable</label>
+  <label>
+    Language:
+    <select id="languageSelect">
+      <option value="en-US">English</option>
+    </select>
+  </label>
+  <button onclick="clearEvents()">🧼 Clear Events</button>
+</div>
+
+<div class="card" id="responseBox"><strong>🧠 Ana Says:</strong> <div id="responseText"></div></div>
+<div class="card" id="reminderBox"><strong>🔔 Reminders:</strong> <div id="reminderText"></div></div>
+<div class="card" id="timetableBox">
+  <strong>📚 Today's Timetable:</strong>
+  <div id="timetableText">Not uploaded</div>
+  <br><input type="file" id="uploadTimetable" accept=".txt">
+</div>
+
+<div class="card" id="calendarBox">
+  <strong>📅 Calendar:</strong><br>
+  <input type="date" id="calendarDate">
+  <input type="time" id="calendarTime" step="60">
+  <input type="text" id="calendarEvent" placeholder="Event Description">
+  <button onclick="addCalendarEvent()">➕ Add Event</button>
+  <button onclick="getCalendarEvents()">🔍 View Events</button>
+  <div id="calendarEvents"></div>
+</div>
+
+<script>
+const serverUrl = "/ask";
+
+function toggleSettings() {
+  const panel = document.getElementById("settingsPanel");
+  panel.style.display = panel.style.display === "none" ? "block" : "none";
+}
+
+function sendMessage() {
+  const userInput = document.getElementById('userInput').value.trim();
+  if (!userInput) return;
+
+  fetch(serverUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ message: userInput })
+  })
+  .then(res => res.json())
+  .then(data => {
+    const text = data.response || data.error;
+    const responseBox = document.getElementById('responseBox');
+    document.getElementById('responseText').innerText = text;
+    const shouldHide = document.getElementById('hideResponse').checked;
+    responseBox.style.display = shouldHide ? 'none' : 'block';
+    speak(stripEmojis(text));
+  });
+}
+
+function startListening() {
+  const indicator = document.getElementById('listening');
+  if (!('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) {
+    alert('Speech recognition not supported.');
+    return;
+  }
+  const recog = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+  recog.lang = 'en-US';
+  recog.start();
+  indicator.innerText = '🎧 Listening...';
+  recog.onresult = (e) => {
+    document.getElementById('userInput').value = e.results[0][0].transcript;
+    indicator.innerText = '';
+    sendMessage();
+  };
+  recog.onerror = () => { indicator.innerText = ''; };
+}
+
+function stopSpeaking() {
+  if (window.speechSynthesis) window.speechSynthesis.cancel();
+}
+
+function speak(text) {
+  if (!window.speechSynthesis) return;
+  window.speechSynthesis.cancel();
+  const utter = new SpeechSynthesisUtterance(text);
+  utter.lang = document.getElementById("languageSelect").value;
+  window.speechSynthesis.speak(utter);
+}
+
+function stripEmojis(text) {
+  return text.replace(/[😀-🛿☀-⛿✀-➿🤀-🧿🩰-🫿🌀-🗿🚀-🛿]/gu, '').replace(/Machi/gi, '').trim();
+}
+
+setInterval(() => {
+  fetch('/get_reminders')
+    .then(res => res.json())
+    .then(data => {
+      const reminderBox = document.getElementById('reminderBox');
+      if (data.reminders.length > 0) {
+        const latest = data.reminders[data.reminders.length - 1];
+        document.getElementById('reminderText').innerText = data.reminders.join('\n');
+        const shouldHide = document.getElementById('hideReminder').checked;
+        reminderBox.style.display = shouldHide ? 'none' : 'block';
+        speak(stripEmojis(latest));
+      }
+    });
+}, 5000);
+
+document.getElementById("uploadTimetable").addEventListener("change", (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const formData = new FormData();
+  formData.append("file", file);
+
+  fetch("/upload_timetable", { method: "POST", body: formData })
+    .then(res => res.json())
+    .then(data => {
+      document.getElementById("timetableText").innerText = data.message;
+      const box = document.getElementById("timetableBox");
+      const shouldHide = document.getElementById('hideTimetable').checked;
+      box.style.display = shouldHide ? 'none' : 'block';
+      if (!shouldHide) speak("Timetable uploaded. I'll remind you.");
+    });
+});
+
+function addCalendarEvent() {
+  const date = document.getElementById("calendarDate").value;
+  const time = document.getElementById("calendarTime").value;
+  const event = document.getElementById("calendarEvent").value.trim();
+  if (!date || !time || !event) return alert("Fill all fields!");
+
+  fetch("/add_calendar_event", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ date, time, event })
+  })
+  .then(res => res.json())
+  .then(data => {
+    speak(stripEmojis(data.message));
+    getCalendarEvents();
+  });
+}
+
+function getCalendarEvents() {
+  const date = document.getElementById("calendarDate").value;
+  if (!date) return alert("Pick a date!");
+
+  fetch(`/get_calendar_events?date=${date}`)
+    .then(res => res.json())
+    .then(data => {
+      const box = document.getElementById("calendarEvents");
+      if (data.events.length === 0) {
+        box.innerText = "No events for this day.";
+      } else {
+        box.innerHTML = data.events.map(e => `<div>⏰ ${formatTime12hr(e.time)} - ${e.event}</div>`).join('');
+      }
+    });
+}
+
+function clearEvents() {
+  fetch('/clear_events', { method: 'POST' })
+    .then(() => {
+      document.getElementById("calendarEvents").innerHTML = "All events cleared.";
+      speak("All events cleared.");
+    });
+}
+
+function formatTime12hr(timeStr) {
+  const [h, m] = timeStr.split(":");
+  const date = new Date();
+  date.setHours(h);
+  date.setMinutes(m);
+  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+}
+</script>
+
+</body>
+</html>
